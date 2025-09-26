@@ -18,8 +18,8 @@
       background: white;
       padding: 2rem;
       border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(255, 0, 0, 0.1);
-      max-width: 500px;
+      box-shadow: 0 4px 12px rgb(164, 255, 164);
+      max-width: 600px;
       width: 100%;
     }
     h1 {
@@ -51,7 +51,8 @@
   </style>
 </head>
 <body>
-  <div class="card">
+  
+  <div id="setup-screen" class="card">
     <h1>SpeakUp!</h1>
 
     <label for="teams">Number of Teams</label>
@@ -60,16 +61,55 @@
     <label for="time">Time per Team (mins)</label>
     <input type="number" id="time" min="1" value="2">
 
+   
     <label for="mode">Game Mode</label>
     <select id="mode">
-      <option value="random">Random Fun Topics</option>
-      <option value="debate">Debate</option>
-      <option value="story">Storytelling</option>
-      <option value="problem">Problem Solving</option>
-      <option value="cycle">Cycle Through All</option>
+      <option value="random fun topics!">Random Fun Topics</option>
+      <option value="debate!">Debate</option>
+      <option value="storytelling!">Storytelling</option>
+      <option value="problem solving!">Problem Solving</option>
+      <option value="cycle through all!">Cycle Through All</option>
     </select>
 
-    <button>Start Game</button>
+    <button id="startBtn">Start Game</button>
   </div>
+
+  
+  <div id="game-screen" class="card" style="display:none;">
+    <h1>Game Screen</h1>
+    <p id="game-info"></p>
+    <button id="backBtn">Go Back</button>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById("startBtn");
+    const backBtn = document.getElementById("backBtn");
+    const setupScreen = document.getElementById("setup-screen");
+    const gameScreen = document.getElementById("game-screen");
+    const gameInfo = document.getElementById("game-info");
+
+    startBtn.addEventListener("click", () => {
+      
+    
+      const teams = document.getElementById("teams").value;
+      const time = document.getElementById("time").value;
+      const mode = document.getElementById("mode").value;
+
+     
+      gameInfo.textContent = `Game started with ${teams} teams, ${time} minutes each, mode: ${mode}`;
+
+    
+      setupScreen.style.display="none";
+      gameScreen.style.display = "block";
+    });
+
+    backBtn.addEventListener("click", () => {
+      
+      gameScreen.style.display = "none";
+      setupScreen.style.display = "block";
+
+      
+    });
+  </script>
 </body>
 </html>
