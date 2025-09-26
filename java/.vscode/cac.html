@@ -19,7 +19,7 @@
       padding: 2rem;
       border-radius: 16px;
       box-shadow: 0 4px 12px rgb(164, 255, 164);
-      max-width: 600px;
+      max-width: 400px;
       width: 100%;
     }
     h1 {
@@ -57,17 +57,18 @@
     <label for="teams">Number of Teams</label>
     <input type="number" id="teams" min="1" value="2">
 
-    <label for="time">Time per Team (mins)</label>
+    
     <input type="number" id="time" min="1" value="2">
+    <label for="time">Time per Team (mins)</label>
 
    
     <label for="mode">Game Mode</label>
     <select id="mode">
-      <option value="random fun topics!">Random Fun Topics</option>
-      <option value="debate!">Debate</option>
-      <option value="storytelling!">Storytelling</option>
-      <option value="problem solving!">Problem Solving</option>
-      <option value="cycle through all!">Cycle Through All</option>
+      <option value="Random fun topics!">Random Fun Topics</option>
+      <option value="Debate!">Debate</option>
+      <option value="Storytelling!">Storytelling</option>
+      <option value="Problem solving!">Problem Solving</option>
+      <option value="Cycle through all!">Cycle Through All</option>
     </select>
 
     <button id="startBtn">Start Game</button>
@@ -93,6 +94,7 @@
       const teams = document.getElementById("teams").value;
       const time = document.getElementById("time").value;
       const mode = document.getElementById("mode").value;
+      
 
      
       gameInfo.textContent = `Game started with ${teams} teams, ${time} minutes each, mode: ${mode}`;
@@ -104,8 +106,8 @@
 
     backBtn.addEventListener("click", () => {
       
-      gameScreen.style.display = "none";
       setupScreen.style.display = "block";
+      gameScreen.style.display = "none";
 
       
     });
