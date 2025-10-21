@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speak Up! - Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    
+    .game-container {
+      background: white;
+      padding: 2rem;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(255, 0, 0, 0.1);
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+    }
+    
+    .team-display {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #03a83d;
+      margin-bottom: 1rem;
+    }
+    
+    .timer {
+      font-size: 4rem;
+      font-weight: bold;
+      color: #ff4444;
+      margin: 2rem 0;
+      padding: 1rem;
+      border: 3px solid #ff4444;
+      border-radius: 50%;
+      width: 200px;
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 2rem auto;
+    }
+    
+    .prompt {
+      font-size: 1.2rem;
+      margin: 2rem 0;
+      padding: 1rem;
+      background: #f0f8ff;
+      border-radius: 8px;
+      border-left: 4px solid #03a83d;
+    }
+    
+    .controls {
+      margin-top: 2rem;
+    }
+    
+    button {
+      padding: 1rem 2rem;
+      margin: 0.5rem;
+      border-radius: 8px;
+      border: none;
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    
+    .next-team-btn {
+      background: #03a83d;
+      color: white;
+    }
+    
+    .next-team-btn:hover {
+      background: #028a33;
+    }
+    
+    .next-team-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .back-btn {
+      background: #666;
+      color: white;
+    }
+    
+    .back-btn:hover {
+      background: #555;
+    }
+    
+    .recording-indicator {
+      display: none;
+      color: #ff4444;
+      font-weight: bold;
+      margin: 1rem 0;
+    }
+    
+    .recording-indicator.active {
+      display: block;
+    }
+    
+    .loading-indicator {
+      color: #03a83d;
+      font-weight: bold;
+      margin: 1rem 0;
+    }
+    
+    .loading-indicator.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <div class="team-display" id="currentTeam">Team 1</div>
+    
+    <div class="timer" id="timer">2:00</div>
+    
+    <div class="recording-indicator" id="recordingIndicator">Recording...</div>
+    
+    <div class="loading-indicator" id="loadingIndicator">Generating prompts...</div>
+    
+    <div class="prompt" id="prompt">
+      Your prompt will appear here. This is a sample prompt for demonstration.
+    </div>
+    
+    <div class="controls">
+      <button class="next-team-btn" id="nextTeamBtn" disabled>Next Team</button>
+      <button class="back-btn" id="backBtn">Back to Setup</button>
+    </div>
+  </div>
+
+  <script>
+    // game state
+    let gameData = null;
+    let currentTeamIndex = 0;
+    let timeRemaining = 0;
+    let timerInterval = null;
+    let isRecording = false;
+    let teamPrompts = []; // store generated prompts for each team
+
+    // initialize game when page loads
+    window.addEventListener('load', async function() {
+      // load game data from localStorage
+      const savedData = localStorage.getItem('gameData');
+      if (!savedData) {
+        alert('No game data found. Returning to setup.');
+        window.location.href = 'home.html';
+        return;
+      }
+      
+      gameData = JSON.parse(savedData);
+      timeRemaining = gameData.timePerTeam + 5; // add 5 seconds to selected time
+      
+      // generate prompts for all teams
+      await generateAllPrompts();
+      updateDisplay();
+      startTimer();
+    });
+
+    function updateDisplay() {
+      // update team display
+      document.getElementById('currentTeam').textContent = `Team ${currentTeamIndex + 1}`;
+      
+      // update prompt from generated prompts
+      if (teamPrompts[currentTeamIndex]) {
+        document.getElementById('prompt').textContent = teamPrompts[currentTeamIndex];
+      } else {
+        document.getElementById('prompt').textContent = 'Generating prompt...';
+      }
+      
+      // update timer display
+      updateTimerDisplay();
+    }
+
+    function updateTimerDisplay() {
+      const minutes = Math.floor(timeRemaining / 60);
+      const seconds = timeRemaining % 60;
+      document.getElementById('timer').textContent = 
+        `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    // chatgpt API integration
+    async function generatePrompt(gameMode, teamNumber) {
+      const apiKey = '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'; // Replace with your actual API key
+      
+      const promptTemplates = {
+        'debate': `Generate a completely different and original one-sentence debate or convincing topic in a party game. The goal is to argue for a side or convince the audience of an idea. Make it controversial but fun. DO NOT use common debate topics, avoid pizza and teleportation. DO NOT repeat previous topics. Be creative and unexpected. YOU choose the side. Examples: "Argue that robots should replace teachers" or "Argue that weekends should be 4 days long" or "Convince us why penguins should rule the world".`,
+        'story': `Generate a completely different one-sentence storytelling prompt for a party game. Include 2-3 random objects. DO NOT repeat objects. Ensure it is different and original from previous topics. Examples: "Tell a story that includes a magic lamp and a talking cat" or "Create a story about a rubber duck and a spaceship".`,
+        'problem': `Generate a one-sentence problem-solving scenario for a party game. Make it absurd but entertaining and keep it simple. Ensure it is different and original from previous topics. Examples: "You are lost in space with only a rubber duck - explain how you will survive" or "Convince aliens that Earth is worth saving using only emojis".`,
+        'tedx': `Generate a 1-2 sentence TEDx-style speaking prompt for a party game. Make it motivational or explanatory but keep it simple. Ensure it is different and original from previous topics. Examples: “The power of failing.” or “Why creativity matters more than intelligence.” or “How technology shapes human connection.”`,
+      };
+
+      const systemPrompt = promptTemplates[gameMode] || promptTemplates['random'];
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: 'You are a creative party game prompt generator. Generate engaging, fun speaking prompts for teams.' },
+              { role: 'user', content: systemPrompt }
+            ],
+            max_tokens: 180,
+            temperature: 1.2
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content.trim();
+      } catch (error) {
+        console.error('Error generating prompt:', error);
+        // fallback prompts if API fails
+        const fallbackPrompts = {
+          'debate': `Argue for or against: Team ${teamNumber} is the best team in the game.`,
+          'story': `Tell a story about Team ${teamNumber}'s greatest adventure.`,
+          'problem': `Team ${teamNumber} is stuck on a desert island with only a rubber duck. How will you survive?`,
+          'tedx': `Team ${teamNumber}, what motivates you?`,
+        };
+        return fallbackPrompts[gameMode] || fallbackPrompts['random'];
+      }
+    }
+
+    async function generateAllPrompts() {
+      // show loading state
+      document.getElementById('loadingIndicator').classList.add('active');
+      document.getElementById('prompt').textContent = 'Generating prompts for all teams...';
+      
+      try {
+        // generate prompts for all teams
+        const promptPromises = [];
+        for (let i = 0; i < gameData.teams; i++) {
+          promptPromises.push(generatePrompt(gameData.gameMode, i + 1));
+        }
+        
+        teamPrompts = await Promise.all(promptPromises);
+        console.log('Generated prompts:', teamPrompts);
+        
+        // hide loading indicator
+        document.getElementById('loadingIndicator').classList.remove('active');
+      } catch (error) {
+        console.error('Error generating prompts:', error);
+        document.getElementById('loadingIndicator').classList.remove('active');
+        alert('Failed to generate prompts. Using fallback prompts.');
+      }
+    }
+
+    function startTimer() {
+      // start recording indicator
+      document.getElementById('recordingIndicator').classList.add('active');
+      isRecording = true;
+      
+      // start countdown
+      timerInterval = setInterval(function() {
+        timeRemaining--;
+        updateTimerDisplay();
+        
+        if (timeRemaining <= 0) {
+          stopTimer();
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      document.getElementById('recordingIndicator').classList.remove('active');
+      isRecording = false;
+      document.getElementById('nextTeamBtn').disabled = false;
+    }
+
+    // event listeners
+    document.getElementById('nextTeamBtn').addEventListener('click', function() {
+      if (currentTeamIndex < gameData.teams - 1) {
+        // move to next team
+        currentTeamIndex++;
+        timeRemaining = gameData.timePerTeam + 5;
+        document.getElementById('nextTeamBtn').disabled = true;
+        updateDisplay();
+        startTimer();
+      } else {
+        // all teams done, go to results
+        alert('All teams have completed their turns!');
+        // navigate to results page
+        window.location.href = 'results.html';
+      }
+    });
+
+    document.getElementById('backBtn').addEventListener('click', function() {
+      if (confirm('Are you sure you want to go back? This will end the current game.')) {
+        window.location.href = 'home.html';
+      }
+    });
+  </script>
+</body>
+</html>
