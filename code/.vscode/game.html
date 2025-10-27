@@ -7,70 +7,54 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #ffffff;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+      background: white;
       margin: 0;
       padding: 20px;
+      text-align: center;
     }
     
     .game-container {
       background: white;
-      padding: 2rem;
-      border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(255, 0, 0, 0.1);
+      padding: 20px;
       max-width: 600px;
-      width: 100%;
-      text-align: center;
+      margin: 0 auto;
+      border: 2px solid black;
     }
     
     .team-display {
-      font-size: 2.5rem;
+      font-size: 36px;
       font-weight: bold;
       color: #03a83d;
-      margin-bottom: 1rem;
+      margin: 20px 0;
     }
     
     .timer {
-      font-size: 4rem;
+      font-size: 48px;
       font-weight: bold;
-      color: #ff4444;
-      margin: 2rem 0;
-      padding: 1rem;
-      border: 3px solid #ff4444;
-      border-radius: 50%;
-      width: 200px;
-      height: 200px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 2rem auto;
+      color: #ff0000;
+      margin: 20px 0;
+      padding: 20px;
+      border: 3px solid black;
     }
     
     .prompt {
-      font-size: 1.2rem;
-      margin: 2rem 0;
-      padding: 1rem;
-      background: #f0f8ff;
-      border-radius: 8px;
-      border-left: 4px solid #03a83d;
+      font-size: 18px;
+      margin: 20px 0;
+      padding: 15px;
+      background: #f0f0f0;
+      border: 1px solid black;
     }
     
     .controls {
-      margin-top: 2rem;
+      margin-top: 20px;
     }
     
     button {
-      padding: 1rem 2rem;
-      margin: 0.5rem;
-      border-radius: 8px;
-      border: none;
-      font-size: 1.1rem;
+      padding: 15px 30px;
+      margin: 10px;
+      border: 2px solid black;
+      font-size: 16px;
       cursor: pointer;
-      transition: background-color 0.3s;
     }
     
     .next-team-btn {
@@ -98,9 +82,9 @@
     
     .recording-indicator {
       display: none;
-      color: #ff4444;
+      color: #ff0000;
       font-weight: bold;
-      margin: 1rem 0;
+      margin: 15px 0;
     }
     
     .recording-indicator.active {
@@ -110,7 +94,7 @@
     .loading-indicator {
       color: #03a83d;
       font-weight: bold;
-      margin: 1rem 0;
+      margin: 15px 0;
     }
     
     .loading-indicator.active {
@@ -146,6 +130,10 @@
     let timerInterval = null;
     let isRecording = false;
     let teamPrompts = []; // store generated prompts for each team
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let teamScores = []; // store scores for each team
+    let isProcessingAudio = false; // flag to track if audio is being processed
 
     // initialize game when page loads
     window.addEventListener('load', async function() {
@@ -262,10 +250,13 @@
       }
     }
 
-    function startTimer() {
+    async function startTimer() {
       // start recording indicator
       document.getElementById('recordingIndicator').classList.add('active');
       isRecording = true;
+      
+      // start audio recording
+      await startRecording();
       
       // start countdown
       timerInterval = setInterval(function() {
@@ -278,15 +269,218 @@
       }, 1000);
     }
 
-    function stopTimer() {
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        // Store the current team info when recording starts
+        const currentTeam = currentTeamIndex;
+        const currentPrompt = teamPrompts[currentTeamIndex];
+        
+        mediaRecorder.ondataavailable = (event) => {
+          audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = async () => {
+          // stop all tracks
+          stream.getTracks().forEach(track => track.stop());
+          
+          // process the audio with the stored team info
+          await processAudioAndScore(currentTeam, currentPrompt);
+        };
+        
+        mediaRecorder.start();
+      } catch (error) {
+        console.error('Error starting recording:', error);
+        alert('Could not start audio recording. Please enable microphone permissions.');
+      }
+    }
+
+    async function stopTimer() {
       clearInterval(timerInterval);
       document.getElementById('recordingIndicator').classList.remove('active');
       isRecording = false;
+      
+      // stop recording
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      
       document.getElementById('nextTeamBtn').disabled = false;
     }
 
+    async function processAudioAndScore(teamIndex, prompt) {
+      isProcessingAudio = true;
+      try {
+        // show scoring indicator
+        document.getElementById('loadingIndicator').classList.add('active');
+        document.getElementById('loadingIndicator').textContent = 'Scoring team performance...';
+        
+        // convert audio chunks to blob
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        
+        // transcribe audio
+        const transcript = await transcribeAudio(audioBlob);
+        
+        // score the transcript (now returns {score, feedback})
+        const result = await scoreTranscript(transcript, prompt, gameData.gameMode);
+        
+        // store score with feedback using the captured team info
+        teamScores.push({
+          teamNumber: teamIndex + 1,
+          score: result.score,
+          feedback: result.feedback,
+          transcript: transcript,
+          prompt: prompt
+        });
+        
+        console.log(`Team ${teamIndex + 1} scored ${result.score}/100`);
+        
+        // hide scoring indicator
+        document.getElementById('loadingIndicator').classList.remove('active');
+        document.getElementById('loadingIndicator').textContent = 'Generating prompts...';
+      } catch (error) {
+        console.error('Error processing audio:', error);
+        document.getElementById('loadingIndicator').classList.remove('active');
+        
+        // store a default score if processing fails
+        teamScores.push({
+          teamNumber: teamIndex + 1,
+          score: 0,
+          feedback: 'Unable to process audio feedback.',
+          transcript: 'Error processing audio',
+          prompt: prompt
+        });
+      } finally {
+        isProcessingAudio = false;
+      }
+    }
+
+    async function transcribeAudio(audioBlob) {
+      const apiKey = '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';
+      
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.webm');
+      formData.append('model', 'whisper-1');
+      formData.append('language', 'en');
+      
+      try {
+        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: formData
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Transcription failed: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data.text;
+      } catch (error) {
+        console.error('Error transcribing audio:', error);
+        return 'Transcript unavailable due to processing error.';
+      }
+    }
+
+    async function scoreTranscript(transcript, prompt, gameMode) {
+      const apiKey = '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';
+      
+      const scoringCriteria = {
+        'debate': 'Evaluate persuasiveness, logical arguments, and convincing presentation.',
+        'story': 'Evaluate creativity, narrative structure, and storytelling quality.',
+        'problem': 'Evaluate problem-solving approach, originality, and practicality.',
+        'tedx': 'Evaluate clarity, engagement, and motivational impact.'
+      };
+      
+      // First, get the score
+      const scoringPrompt = `You are an expert judge for a speaking competition. Evaluate the following transcript based on:
+1. Content Quality (25 points): Relevance to the prompt and depth of ideas
+2. Creativity & Originality (25 points): Unique perspective and innovative thinking
+3. Structure & Clarity (20 points): Organization, coherence, and clear communication
+4. Speaking Quality (20 points): Minimize filler words, maintain engaging pace
+5. Overall Impact (10 points): How memorable and impactful the presentation was
+
+${scoringCriteria[gameMode] || 'Evaluate overall quality and engagement.'}
+
+Prompt given: "${prompt}"
+Transcript: "${transcript}"
+
+Provide ONLY a number from 0-100 as your final score. Do not include any explanation, just the number.`;
+
+      try {
+        // Get the score
+        const scoreResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: 'You are a fair and objective judge for speaking competitions.' },
+              { role: 'user', content: scoringPrompt }
+            ],
+            max_tokens: 10,
+            temperature: 0.5
+          })
+        });
+        
+        if (!scoreResponse.ok) {
+          throw new Error(`Scoring failed: ${scoreResponse.status}`);
+        }
+        
+        const scoreData = await scoreResponse.json();
+        const scoreText = scoreData.choices[0].message.content.trim();
+        const scoreMatch = scoreText.match(/\d+/);
+        const score = scoreMatch ? parseInt(scoreMatch[0]) : 50;
+        const finalScore = Math.max(0, Math.min(100, score));
+        
+        // Now get detailed feedback
+        const feedbackPrompt = `As an expert judge, provide brief but specific feedback (2-3 sentences) explaining why this speaking performance received a score of ${finalScore}/100. Be constructive and encouraging. Focus on the most important strengths and one area for improvement.
+
+Prompt given: "${prompt}"
+Transcript: "${transcript}"
+Score: ${finalScore}/100`;
+
+        const feedbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: 'You are a supportive and constructive judge for speaking competitions.' },
+              { role: 'user', content: feedbackPrompt }
+            ],
+            max_tokens: 150,
+            temperature: 0.7
+          })
+        });
+        
+        if (!feedbackResponse.ok) {
+          throw new Error(`Feedback generation failed: ${feedbackResponse.status}`);
+        }
+        
+        const feedbackData = await feedbackResponse.json();
+        const feedback = feedbackData.choices[0].message.content.trim();
+        
+        return { score: finalScore, feedback: feedback };
+      } catch (error) {
+        console.error('Error scoring transcript:', error);
+        return { score: 50, feedback: 'Unable to generate detailed feedback at this time.' };
+      }
+    }
+
     // event listeners
-    document.getElementById('nextTeamBtn').addEventListener('click', function() {
+    document.getElementById('nextTeamBtn').addEventListener('click', async function() {
       if (currentTeamIndex < gameData.teams - 1) {
         // move to next team
         currentTeamIndex++;
@@ -295,7 +489,16 @@
         updateDisplay();
         startTimer();
       } else {
-        // all teams done, go to results
+        // all teams done, wait for audio processing if needed
+        const maxWaitTime = 30000; // 30 seconds max wait
+        const startTime = Date.now();
+        
+        while (isProcessingAudio && (Date.now() - startTime) < maxWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, 100)); // wait 100ms
+        }
+        
+        // save scores and go to results
+        localStorage.setItem('teamScores', JSON.stringify(teamScores));
         alert('All teams have completed their turns!');
         // navigate to results page
         window.location.href = 'results.html';
