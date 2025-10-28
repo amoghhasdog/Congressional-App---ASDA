@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speak Up! - Results</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: white;
+      margin: 0;
+      padding: 20px;
+    }
+    
+    .results-container {
+      background: white;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      border: 2px solid black;
+      text-align: center;
+    }
+    
+    h1 {
+      margin: 20px 0;
+    }
+    
+    .subtitle {
+      margin: 20px 0;
+    }
+    
+    .team-rankings {
+      margin: 20px 0;
+    }
+    
+    .team-card {
+      background: white;
+      padding: 15px;
+      border: 2px solid black;
+      margin: 10px 0;
+      text-align: left;
+      position: relative;
+    }
+    
+    .team-card.first {
+      background: #fff8dc;
+    }
+    
+    .team-card.second {
+      background: #f5f5f5;
+    }
+    
+    .team-card.third {
+      background: #fae6d9;
+    }
+    
+    .rank-badge {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: #ddd;
+      padding: 5px 10px;
+      font-weight: bold;
+    }
+    
+    .team-number {
+      font-size: 20px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    
+    .team-score {
+      font-size: 32px;
+      font-weight: bold;
+      margin: 10px 0;
+      color: #03a83d;
+    }
+    
+    .feedback-box {
+      margin: 15px 0;
+      padding: 10px;
+      background: #f0f0f0;
+      border: 1px solid black;
+    }
+    
+    .feedback-box strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+    
+    .feedback-box p {
+      margin: 0;
+    }
+    
+    .team-details {
+      margin-top: 15px;
+      border-top: 1px solid black;
+      padding-top: 10px;
+    }
+    
+    .team-details summary {
+      cursor: pointer;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    
+    .team-details .detail-item {
+      margin: 10px 0;
+    }
+    
+    .prompt-text {
+      font-style: italic;
+    }
+    
+    .transcript-text {
+      max-height: 150px;
+      overflow-y: auto;
+      background: #f0f0f0;
+      padding: 10px;
+      border: 1px solid black;
+      margin-top: 5px;
+    }
+    
+    .controls {
+      margin-top: 30px;
+    }
+    
+    button {
+      padding: 15px 30px;
+      border: 2px solid black;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    
+    .play-again-btn {
+      background: #03a83d;
+      color: white;
+    }
+    
+    .play-again-btn:hover {
+      background: #028a33;
+    }
+    
+    .home-btn {
+      background: #666;
+      color: white;
+    }
+    
+    .home-btn:hover {
+      background: #555;
+    }
+    
+    .no-results {
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="results-container">
+    <h1>Final Results</h1>
+    <p class="subtitle">Here are the rankings for all teams!</p>
+    
+    <div id="rankings-container"></div>
+    
+    <div class="controls">
+      <button class="play-again-btn" id="playAgainBtn">Play Again</button>
+      <button class="home-btn" id="homeBtn">Back to Home</button>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function() {
+      // load scores from localStorage
+      const scoresData = localStorage.getItem('teamScores');
+      
+      if (!scoresData) {
+        document.getElementById('rankings-container').innerHTML = 
+          '<div class="no-results">No results found. Please play a game first.</div>';
+        return;
+      }
+      
+      let teamScores = JSON.parse(scoresData);
+      
+      // sort teams by score (descending)
+      teamScores.sort((a, b) => b.score - a.score);
+      
+      // display rankings
+      const container = document.getElementById('rankings-container');
+      
+      const rankingsHTML = teamScores.map((team, index) => {
+        let cardClass = '';
+        let rankText = `#${index + 1}`;
+        
+        if (index === 0) {
+          cardClass = 'first';
+        } else if (index === 1) {
+          cardClass = 'second';
+        } else if (index === 2) {
+          cardClass = 'third';
+        }
+        
+        return `
+          <div class="team-card ${cardClass}">
+            <div class="rank-badge">${rankText}</div>
+            <div class="team-number">Team ${team.teamNumber}</div>
+            <div class="team-score">${team.score} / 100</div>
+            <div class="feedback-box">
+              <strong>AI Feedback:</strong>
+              <p>${team.feedback || 'No feedback available.'}</p>
+            </div>
+            <div class="team-details">
+              <details>
+                <summary>View Full Details</summary>
+                <div class="detail-item">
+                  <strong>Prompt:</strong>
+                  <div class="prompt-text">${team.prompt}</div>
+                </div>
+                <div class="detail-item">
+                  <strong>Transcript:</strong>
+                  <div class="transcript-text">${team.transcript}</div>
+                </div>
+              </details>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      container.innerHTML = '<div class="team-rankings">' + rankingsHTML + '</div>';
+    });
+    
+    // event listeners
+    document.getElementById('playAgainBtn').addEventListener('click', function() {
+      window.location.href = 'home.html';
+    });
+    
+    document.getElementById('homeBtn').addEventListener('click', function() {
+      window.location.href = 'home.html';
+    });
+  </script>
+</body>
+</html>
+
