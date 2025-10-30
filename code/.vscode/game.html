@@ -8,7 +8,7 @@
   <style>
     body {
       font-family: 'Baloo 2', 'Segoe UI', Arial, sans-serif;
-      background: #f5f7fa;
+      background: #2176D2;
       margin: 0;
       padding: 20px;
       text-align: center;
@@ -47,6 +47,24 @@
       background: #fef5e7;
       display: inline-block;
       min-width: 200px;
+    }
+    
+    /* simple progress bar under the timer */
+    .progress {
+      width: 100%;
+      max-width: 600px;
+      height: 10px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 10px auto 0 auto;
+      border: 1px solid #cbd5e0;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #2176D2;
+      transition: width 0.25s linear;
     }
     
     .prompt {
@@ -136,6 +154,7 @@
     <div class="team-display" id="currentTeam">Team 1</div>
     
     <div class="timer" id="timer">2:00</div>
+    <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
     
     <div class="recording-indicator" id="recordingIndicator">Recording...</div>
     
@@ -155,6 +174,7 @@
     let gameData = null;
     let currentTeamIndex = 0;
     let timeRemaining = 0;
+    let currentTeamTotalTime = 0; // track total time for progress bar
     let timerInterval = null;
     let isRecording = false;
     let teamPrompts = []; // store generated prompts for each team
@@ -175,6 +195,7 @@
       
       gameData = JSON.parse(savedData);
       timeRemaining = gameData.timePerTeam + 5; // add 5 seconds to selected time
+      currentTeamTotalTime = timeRemaining;
       
       // generate prompts for all teams
       await generateAllPrompts(); 
@@ -202,6 +223,15 @@
       const seconds = timeRemaining % 60;
       document.getElementById('timer').textContent = 
         `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      updateProgressBar();
+    }
+
+    function updateProgressBar() {
+      const bar = document.getElementById('progressBar');
+      if (!bar || currentTeamTotalTime <= 0) return;
+      const elapsed = Math.max(0, currentTeamTotalTime - timeRemaining);
+      const percent = Math.max(0, Math.min(100, (elapsed / currentTeamTotalTime) * 100));
+      bar.style.width = `${percent}%`;
     }
 
     // chatgpt API integration
@@ -597,6 +627,7 @@ Score: ${finalScore}/100`;
         // move to next team
         currentTeamIndex++;
         timeRemaining = gameData.timePerTeam + 5;
+        currentTeamTotalTime = timeRemaining;
         document.getElementById('nextTeamBtn').disabled = true;
         updateDisplay();
         startTimer();
