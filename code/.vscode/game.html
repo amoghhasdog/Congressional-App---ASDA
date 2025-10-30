@@ -164,7 +164,7 @@
     </div>
     
     <div class="controls">
-      <button class="next-team-btn" id="nextTeamBtn" disabled>Next Team</button>
+      <button class="next-team-btn" id="nextTeamBtn" disabled>Next</button>
       <button class="back-btn" id="backBtn">Back to Setup</button>
     </div>
 
@@ -188,12 +188,15 @@
     let isProcessingAudio = false; // flag to track if audio is being processed
 
     async function startWarning() {
+      timeRemaining=5;
+      currentTeamTotalTime=5;
+      updateProgressBar();
       document.getElementById('timer').style.display='none';
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       timeRemaining=5;
       currentTeamTotalTime=5;
       warningInterval = setInterval(function() {
-        timeRemaining--;
+        timeRemaining-=0.02;
         updateProgressBar();
         
         if (timeRemaining < 0) {
@@ -201,7 +204,7 @@
           clearInterval(warningInterval);
           startTimer();
         }
-      }, 1000);
+      }, 20);
   }
 
     // initialize game when page loads
@@ -510,6 +513,7 @@ where A=the amount invested without dollar signs, commas, or periods (and keep i
 B=the percentage of equity taken (just the number, no % sign)
 C=brief feedback (2-3 sentences) explaining your decision.
 and there is a newline between B and C.
+Note: if no transcript was provided, give zero investment and zero equity taken with appropriate feedback.
 NOTE: THIS IS VERY VERY IMPORTANT. THERE SHOULD BE A NEWLINE BETWEEN B AND C BUT NOT BETWEEN A AND B. THERE SHOULD ONLY BE A SPACE BETWEEN A AND B.`;
 
       try {
@@ -592,7 +596,7 @@ Provide ONLY a number from 0-100 as your final score. Do not include any explana
           body: JSON.stringify({
             model: 'gpt-3.5-turbo',
             messages: [
-              { role: 'system', content: 'You are a fair and objective judge for speaking competitions. You must be brutally honest as well. Dont just be a yes man' },
+              { role: 'system', content: 'You are a fair and objective judge for speaking competitions. You must be honest as well: Dont just be a yes man. However, dont be brutal. If no transcript is provided give a zero.' },
               { role: 'user', content: scoringPrompt }
             ],
             max_tokens: 10,
@@ -611,7 +615,7 @@ Provide ONLY a number from 0-100 as your final score. Do not include any explana
         const finalScore = Math.max(0, Math.min(100, score));
         
         // Now get detailed feedback
-        const feedbackPrompt = `As an expert judge, provide brief but specific feedback (2-3 sentences) explaining why this speaking performance received a score of ${finalScore}/100. Be constructive and encouraging. Focus on the most important strengths and one area for improvement.
+        const feedbackPrompt = `As an expert judge, provide brief but specific feedback (2-3 sentences) explaining why this speaking performance received a score of ${finalScore}/100. Be constructive and encouraging. Focus on the most important strengths and one area for improvement. Note that if no transcript is provided, then that explains why the score given should be a zero.
 KEEP THIS IN MIND. THIS IS VERY VERY IMPORTANT: Do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
 Prompt given: "${prompt}"
 Transcript: "${transcript}"
@@ -652,7 +656,6 @@ Score: ${finalScore}/100`;
     window.clickLock=false;
     document.getElementById('nextTeamBtn').addEventListener('click', async function() {
       if (clickLock) return;
-      clickLock=true;
       if (currentTeamIndex < gameData.teams - 1) {
         // move to next team
         currentTeamIndex++;
@@ -662,6 +665,7 @@ Score: ${finalScore}/100`;
         startWarning();
       } else {
         // all teams done, wait for audio processing if needed
+        clickLock=true;
         const maxWaitTime = 30000; // 30 seconds max wait
         const startTime = Date.now();
         
@@ -677,6 +681,7 @@ Score: ${finalScore}/100`;
           localStorage.setItem('teamScores', JSON.stringify(teamScores));
           localStorage.setItem('sharktankMode', 'false');
         }
+        clickLock=false;
         // navigate to results page
         window.location.href = 'results.html';
       }
