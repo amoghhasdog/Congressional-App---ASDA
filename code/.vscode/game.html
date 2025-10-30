@@ -8,8 +8,7 @@
   <style>
     body {
       font-family: 'Baloo 2', 'Segoe UI', Arial, sans-serif;
-      background: #2176D2 url('../../Blurt%20Background.png') no-repeat center center fixed;
-      background-size: cover;
+      background: #2176D2;
       margin: 0;
       padding: 20px;
       text-align: center;
@@ -154,7 +153,7 @@
   <div class="game-container">
     <div class="team-display" id="currentTeam">Team 1</div>
     
-    <div class="timer" id="timer">2:00</div>
+    <div class="timer" id="timer">0:00</div>
     <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
     
     <div class="recording-indicator" id="recordingIndicator">Recording...</div>
@@ -165,7 +164,7 @@
     </div>
     
     <div class="controls">
-      <button class="next-team-btn" id="nextTeamBtn" disabled>Next Team</button>
+      <button class="next-team-btn" id="nextTeamBtn" disabled>Next</button>
       <button class="back-btn" id="backBtn">Back to Setup</button>
     </div>
 
@@ -177,33 +176,56 @@
     // game state
     let gameData = null;
     let currentTeamIndex = 0;
-    let timeRemaining = 0;
-    let currentTeamTotalTime = 0; // track total time for progress bar
+    let timeRemaining = 5;
+    let currentTeamTotalTime = 5; // track total time for progress bar
     let timerInterval = null;
     let isRecording = false;
     let teamPrompts = []; // store generated prompts for each team
     let mediaRecorder = null;
     let audioChunks = [];
     let teamScores = []; // store scores for each team
+    let teamScoresSharktank = []; // store scores for shark tank mode
     let isProcessingAudio = false; // flag to track if audio is being processed
+
+    async function startWarning() {
+      timeRemaining=5;
+      currentTeamTotalTime=5;
+      updateProgressBar();
+      document.getElementById('timer').style.display='none';
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      timeRemaining=5;
+      currentTeamTotalTime=5;
+      warningInterval = setInterval(function() {
+        timeRemaining-=0.02;
+        updateProgressBar();
+        
+        if (timeRemaining < 0) {
+          timeRemaining=gameData.timePerTeam;
+          clearInterval(warningInterval);
+          startTimer();
+        }
+      }, 20);
+  }
 
     // initialize game when page loads
     window.addEventListener('load', async function() {
+      document.getElementById('timer').style.display='none';
       // load game data from localStorage
       const savedData = localStorage.getItem('gameData');
       if (!savedData) {
+        alert('No game data found. Returning to setup.');
         window.location.href = 'home.html';
         return;
       }
       
       gameData = JSON.parse(savedData);
-      timeRemaining = gameData.timePerTeam + 5; // add 5 seconds to selected time
-      currentTeamTotalTime = timeRemaining;
+      //timeRemaining = gameData.timePerTeam;
+      currentTeamTotalTime = 5;
       
       // generate prompts for all teams
-      await generateAllPrompts(); 
+      await generateAllPrompts();
       updateDisplay();
-      startTimer();
+      await startWarning();
     });
 
     function updateDisplay() {
@@ -247,8 +269,7 @@
         'problem': `One-sentence survival/problem scenario; absurd but easy to grasp.`,
         'tedx': `One-sentence TEDx-style idea to explain or inspire; short and clear.`,
         'sharktank': `One-sentence Shark Tank prompt; clearly describe quirky product/service; ask team to convince investors; fun and direct.`,
-        'freestyle': `Return three easy-to-rhyme single words separated by a comma; pick words with simple rhyme-friendly endings; explain that the team has to make a freestyle with these words provided.`,
-        'educational': `One-sentence academic topic to explain clearly; include a focused subtopic or concept (e.g., photosynthesis energy transfer, Pythagorean theorem proof idea, supply and demand equilibrium). Avoid jargon in the prompt; be specific and age-agnostic.`
+        'freestyle': `Return three pretty-common words separated by commas; no explanation. These will end up being integrated into a freestyle rap. The words should have two syllables max.`
       };
 
       const systemPrompt = promptTemplates[gameMode];
@@ -301,11 +322,20 @@
         // hide loading indicator
         document.getElementById('loadingIndicator').classList.remove('active');
       } catch (error) {
+        console.error('Error generating prompts:', error);
         document.getElementById('loadingIndicator').classList.remove('active');
+        alert('Failed to generate prompts. Using fallback prompts.');
       }
     }
 
     async function startTimer() {
+
+      document.getElementById('timer').style.display='block';
+
+      timeRemaining = gameData.timePerTeam;
+      currentTeamTotalTime = gameData.timePerTeam;
+      updateTimerDisplay();
+
       // start recording indicator
       document.getElementById('recordingIndicator').classList.add('active');
       isRecording = true;
@@ -333,7 +363,6 @@
 
     async function startRecording() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
         
@@ -355,6 +384,8 @@
         
         mediaRecorder.start();
       } catch (error) {
+        console.error('Error starting recording:', error);
+        alert('Could not start audio recording. Please enable microphone permissions.');
       }
     }
 
@@ -384,17 +415,30 @@
         // transcribe audio
         const transcript = await transcribeAudio(audioBlob);
         
+        var result;
+
         // score the transcript (now returns {score, feedback})
-        const result = await scoreTranscript(transcript, prompt, gameData.gameMode);
-        
-        // store score with feedback using the captured team info
-        teamScores.push({
-          teamNumber: teamIndex + 1,
-          score: result.score,
-          feedback: result.feedback,
-          transcript: transcript,
-          prompt: prompt
-        });
+        if (gameData.gameMode === 'sharktank') {
+          result = await scoreTranscriptSharktank(transcript, prompt);
+          teamScoresSharktank.push({
+            teamNumber: teamIndex + 1,
+            score: result.score,
+            feedback: result.feedback,
+            transcript: transcript,
+            prompt: prompt,
+            investedAmount: result.investedAmount,
+            equityTaken: result.equityTaken
+          });
+        } else {
+            result = await scoreTranscript(transcript, prompt, gameData.gameMode);
+            teamScores.push({
+            teamNumber: teamIndex + 1,
+            score: result.score,
+            feedback: result.feedback,
+            transcript: transcript,
+            prompt: prompt
+          });
+        }
         
         console.log(`Team ${teamIndex + 1} scored ${result.score}/100`);
         
@@ -402,12 +446,15 @@
         document.getElementById('loadingIndicator').classList.remove('active');
         document.getElementById('loadingIndicator').textContent = 'Generating prompts...';
       } catch (error) {
+        console.error('Error processing audio:', error);
         document.getElementById('loadingIndicator').classList.remove('active');
+        
+        // store a default score if processing fails
         teamScores.push({
           teamNumber: teamIndex + 1,
           score: 0,
-          feedback: '',
-          transcript: '',
+          feedback: 'Unable to process audio feedback.',
+          transcript: 'Error processing audio',
           prompt: prompt
         });
       } finally {
@@ -439,7 +486,8 @@
         const data = await response.json();
         return data.text;
       } catch (error) {
-        return '';
+        console.error('Error transcribing audio:', error);
+        return 'Transcript unavailable due to processing error.';
       }
     }
 
@@ -457,7 +505,16 @@ ${scoringCriteria || 'Evaluate overall quality and engagement.'}
 Prompt given: "${prompt}"
 Transcript: "${transcript}"
 
-Please state your investment decision and provide brief feedback.`
+Please state your investment decision and provide brief feedback.
+Here is how you should format your response:
+A B
+C
+where A=the amount invested without dollar signs, commas, or periods (and keep in mind this can be zero)
+B=the percentage of equity taken (just the number, no % sign)
+C=brief feedback (2-3 sentences) explaining your decision.
+and there is a newline between B and C.
+Note: if no transcript was provided, give zero investment and zero equity taken with appropriate feedback.
+NOTE: THIS IS VERY VERY IMPORTANT. THERE SHOULD BE A NEWLINE BETWEEN B AND C BUT NOT BETWEEN A AND B. THERE SHOULD ONLY BE A SPACE BETWEEN A AND B.`;
 
       try {
         // Get the score
@@ -470,7 +527,76 @@ Please state your investment decision and provide brief feedback.`
           body: JSON.stringify({
             model: 'gpt-3.5-turbo',
             messages: [
-              { role: 'system', content: 'You are a fair and objective judge for party game speaking competitions.' },
+              { role: 'system', content: 'You are a fair and objective judge for speaking competitions.' },
+              { role: 'user', content: scoringPrompt }
+            ],
+            max_tokens: 120,
+            temperature: 0.5
+          })
+        });
+        
+        if (!scoreResponse.ok) {
+          throw new Error(`Scoring failed: ${scoreResponse.status}`);
+        }
+        
+        const scoreData = await scoreResponse.json();
+        const scoreText = scoreData.choices[0].message.content.trim();
+        
+        const investedAmount = scoreText.split(' ')[0];
+        const equityTaken = scoreText.split(' ')[1].split('\n')[0];
+        const feedback = scoreText.substring(scoreText.indexOf('\n')).trim();
+        var valuation=0;
+        if (investedAmount!=0) {
+            valuation = (parseFloat(investedAmount) / (parseFloat(equityTaken) / 100));
+        }
+
+        return {"score":valuation,"feedback":feedback,"investedAmount":investedAmount,"equityTaken":equityTaken};
+      } catch (error) {
+        console.error('Error scoring transcript:', error);
+        return {"score":0,"feedback":"Unable to generate detailed feedback at this time.","investedAmount":"0","equityTaken":"0" };
+      }
+    }
+
+    async function scoreTranscript(transcript, prompt, gameMode) {
+      const apiKey = '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';
+      
+      const scoringCriteria = {
+        'debate': 'Evaluate persuasiveness, logical arguments, and convincing presentation.',
+        'story': 'Evaluate creativity, narrative structure, and storytelling quality.',
+        'problem': 'Evaluate problem-solving approach, originality, and practicality.',
+        'tedx': 'Evaluate clarity, engagement, and motivational impact.',
+        'sharktank': 'Evaluate clarity of the idea, originality, value proposition, basic feasibility, and overall investor persuasion.',
+        'freestyle': 'Evaluate creativity, flow, and effective use of the given words in the rap performance.'
+      };
+      
+      // First, get the score
+      const scoringPrompt = `You are an expert judge for a speaking competition. Evaluate the following transcript based on:
+1. Content Quality (25 points): Relevance to the prompt and depth of ideas
+2. Creativity & Originality (25 points): Unique perspective and innovative thinking
+3. Structure & Clarity (20 points): Organization, coherence, and clear communication
+4. Speaking Quality (20 points): Minimize filler words, maintain engaging pace
+5. Overall Impact (10 points): How memorable and impactful the presentation was
+ KEEP THIS IN MIND. THIS IS VERY VERY IMPORTANT: Do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
+ 
+${scoringCriteria[gameMode] || 'Evaluate overall quality and engagement.'}
+
+Prompt given: "${prompt}"
+Transcript: "${transcript}"
+
+Provide ONLY a number from 0-100 as your final score. Do not include any explanation, just the number.`;
+
+      try {
+        // Get the score
+        const scoreResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: 'You are a fair and objective judge for speaking competitions. You must be honest as well: Dont just be a yes man. However, dont be brutal. If no transcript is provided give a zero.' },
               { role: 'user', content: scoringPrompt }
             ],
             max_tokens: 10,
@@ -479,141 +605,21 @@ Please state your investment decision and provide brief feedback.`
         });
         
         if (!scoreResponse.ok) {
-          throw new Error('Scoring failed');
+          throw new Error(`Scoring failed: ${scoreResponse.status}`);
         }
         
         const scoreData = await scoreResponse.json();
         const scoreText = scoreData.choices[0].message.content.trim();
+        const scoreMatch = scoreText.match(/\d+/);
+        const score = scoreMatch ? parseInt(scoreMatch[0]) : 50;
+        const finalScore = Math.max(0, Math.min(100, score));
         
-        return scoreText;
-      } catch (error) {
-        console.error('Error scoring transcript:', error);
-        return error;
-      }
-    }
-
-    async function scoreTranscript(transcript, prompt, gameMode) {
-      const apiKey = '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';
-
-      // Mode-specific weighted rubrics (sum to 100)
-      const modeRubrics = {
-        debate: [
-          { name: 'Argumentation & Evidence', points: 35, description: 'Strength of claims, use of evidence, logical reasoning.' },
-          { name: 'Rebuttal & Counterpoints', points: 25, description: 'Ability to anticipate and refute opposing views.' },
-          { name: 'Argument/Idea/Points', points: 20, description: 'Clear thesis, coherent ideas, and well-chosen points.' },
-          { name: 'Delivery & Confidence', points: 10, description: 'Vocal clarity, pace, confidence.' },
-          { name: 'Engagement', points: 10, description: 'Audience connection and energy.' }
-        ],
-        story: [
-          { name: 'Creativity & Originality', points: 40, description: 'Fresh ideas, imaginative elements, unexpected turns.' },
-          { name: 'Argument/Idea/Points', points: 25, description: 'Core idea is clear; points/beats support the idea.' },
-          { name: 'Descriptive Language & Imagery', points: 15, description: 'Vivid details and sensory language.' },
-          { name: 'Delivery & Pace', points: 10, description: 'Fluency, rhythm, and performance.' },
-          { name: 'Engagement', points: 10, description: 'Audience attention and emotional pull.' }
-        ],
-        problem: [
-          { name: 'Problem Understanding', points: 15, description: 'Frames the challenge and constraints.' },
-          { name: 'Solution Strategy', points: 25, description: 'Quality of approach, reasoning, and steps.' },
-          { name: 'Feasibility & Trade-offs', points: 15, description: 'Realism, risks, and alternatives.' },
-          { name: 'Argument/Idea/Points', points: 15, description: 'Clear idea and supporting points for the approach.' },
-          { name: 'Engagement', points: 10, description: 'Keeps audience involved.' },
-          { name: 'Creativity & Originality', points: 20, description: 'Inventive approach, unconventional but coherent ideas.' }
-        ],
-        tedx: [
-          { name: 'Idea Clarity', points: 30, description: 'Core idea is clear and compelling.' },
-          { name: 'Argument/Idea/Points', points: 20, description: 'Coherent points that advance the core idea.' },
-          { name: 'Insight & Impact', points: 25, description: 'Novel insight and takeaways.' },
-          { name: 'Delivery', points: 15, description: 'Presence, voice, and timing.' },
-          { name: 'Engagement', points: 10, description: 'Connection and inspiration.' }
-        ],
-        sharktank: [
-          { name: 'Value Proposition', points: 25, description: 'Clear problem-solution fit and benefits.' },
-          { name: 'Market & Feasibility', points: 25, description: 'Audience, viability, and practical next steps.' },
-          { name: 'Originality', points: 15, description: 'Differentiation and novelty.' },
-          { name: 'Argument/Idea/Points', points: 20, description: 'Concise core idea supported by solid points.' },
-          { name: 'Persuasion & Call to Action', points: 15, description: 'Investor appeal and close.' }
-        ],
-        freestyle: [
-          { name: 'Word Integration', points: 30, description: 'Effective use of the given words.' },
-          { name: 'Flow & Rhythm', points: 25, description: 'Consistent cadence and delivery.' },
-          { name: 'Rhyme & Wordplay', points: 20, description: 'Clever rhymes, punchlines, and schemes.' },
-          { name: 'Delivery & Performance', points: 15, description: 'Confidence, breath control, diction.' },
-          { name: 'Originality', points: 10, description: 'Unique style and ideas.' }
-        ],
-        educational: [
-          { name: 'Accuracy', points: 30, description: 'Facts are correct and precise.' },
-          { name: 'Clarity & Definitions', points: 25, description: 'Key terms explained plainly.' },
-          { name: 'Argument/Idea/Points', points: 20, description: 'Clear central idea supported by appropriate points.' },
-          { name: 'Depth & Examples', points: 15, description: 'Useful examples/analogies, appropriate depth.' },
-          { name: 'Engagement', points: 10, description: 'Keeps listener interested.' }
-        ]
-      };
-
-      const rubric = modeRubrics[gameMode] || [
-        { name: 'Content Quality', points: 40, description: 'Relevance and depth of ideas.' },
-        { name: 'Argument/Idea/Points', points: 30, description: 'Clear thesis and coherent supporting points.' },
-        { name: 'Delivery', points: 20, description: 'Vocal clarity and pacing.' },
-        { name: 'Engagement', points: 10, description: 'Connection with audience.' }
-      ];
-
-      const rubricLines = rubric
-        .map((item, idx) => `${idx + 1}. ${item.name} (${item.points} points): ${item.description}`)
-        .join('\n');
-
-      // Request a single final score only (firm but fair)
-      const scoringPrompt = `You are a firm but fair judge. Be rigorous without nitpicking. This is a fun party game and all content is hypothetical—avoid taking topics too seriously or moralizing. Prioritize speaking skills (clarity, delivery, engagement) and overall argument/idea/points over formal structure when in doubt.
-
-Rubric for ${gameMode} (total 100 points):
-${rubricLines}
-
-Scoring bands (use full 0–100; avoid clustering at 70–90):
-0–19 unusable/off-topic; 20–39 weak; 40–59 fair; 60–79 good; 80–100 strong.
-
-Compute a single final score from 0-100 based on the rubric, emphasizing speaking ability. Return ONLY the integer with no words before or after.
-
-Prompt: "${prompt}"
-Transcript: "${transcript}"`;
-
-      try {
-        // Get the score
-        const scoreResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [
-              { role: 'system', content: 'You are a firm but fair judge. Be rigorous yet reasonable. Output only an integer when asked.' },
-              { role: 'user', content: scoringPrompt }
-            ],
-            max_tokens: 10,
-            temperature: 0.4
-          })
-        });
-        
-        if (!scoreResponse.ok) {
-          throw new Error('Scoring failed');
-        }
-        
-        const scoreData = await scoreResponse.json();
-        const scoreText = scoreData.choices[0].message.content.trim();
-        const numMatch = scoreText.match(/\b(\d{1,3})\b/);
-        let finalScore = numMatch ? parseInt(numMatch[1], 10) : 50;
-        finalScore = Math.max(0, Math.min(100, finalScore));
-
-        const wordCount = (transcript || '').trim().split(/\s+/).filter(Boolean).length;
-        if (!transcript || /Transcript unavailable/i.test(transcript)) finalScore = 5;
-        else if (wordCount < 30) finalScore = Math.min(finalScore, 60);
-
-        // Now get detailed feedback that references the top rubric priorities
-        const topCategories = rubric
-          .slice(0, 2)
-          .map(c => c.name)
-          .join(', ');
-
-        const feedbackPrompt = `Keep it super short. Only list what went wrong.\n1) Argument/Idea/Points: unclear thesis, weak points, or scattered ideas.\n2) Filler/Repeat: frequency; name 1 repeated phrase if any.\n3) Delivery: pace/enunciation/clarity problems.\nTone casual. Party game context—focus speaking, not moralizing.\n\nMode: ${gameMode}\nPrompt: "${prompt}"\nScore: ${finalScore}/100\nTranscript: "${transcript}"`;
+        // Now get detailed feedback
+        const feedbackPrompt = `As an expert judge, provide brief but specific feedback (2-3 sentences) explaining why this speaking performance received a score of ${finalScore}/100. Be constructive and encouraging. Focus on the most important strengths and one area for improvement. Note that if no transcript is provided, then that explains why the score given should be a zero.
+KEEP THIS IN MIND. THIS IS VERY VERY IMPORTANT: Do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
+Prompt given: "${prompt}"
+Transcript: "${transcript}"
+Score: ${finalScore}/100`;
 
         const feedbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -624,35 +630,42 @@ Transcript: "${transcript}"`;
           body: JSON.stringify({
             model: 'gpt-3.5-turbo',
             messages: [
-              { role: 'system', content: 'You are concise, casual, and direct. Keep tone friendly but frank. No advice or rewrites—list specific issues only.' },
+              { role: 'system', content: 'You are a constructive yet brutally honest judge for speaking competitions.' },
               { role: 'user', content: feedbackPrompt }
             ],
-            max_tokens: 80,
-            temperature: 0.6
+            max_tokens: 150,
+            temperature: 0.7
           })
         });
+        
+        if (!feedbackResponse.ok) {
+          throw new Error(`Feedback generation failed: ${feedbackResponse.status}`);
+        }
         
         const feedbackData = await feedbackResponse.json();
         const feedback = feedbackData.choices[0].message.content.trim();
         
         return { score: finalScore, feedback: feedback };
       } catch (error) {
-        return { score: 50, feedback: '' };
+        console.error('Error scoring transcript:', error);
+        return { score: 50, feedback: 'Unable to generate detailed feedback at this time.' };
       }
     }
 
     // event listeners
+    window.clickLock=false;
     document.getElementById('nextTeamBtn').addEventListener('click', async function() {
+      if (clickLock) return;
       if (currentTeamIndex < gameData.teams - 1) {
         // move to next team
         currentTeamIndex++;
-        timeRemaining = gameData.timePerTeam + 5;
-        currentTeamTotalTime = timeRemaining;
+        currentTeamTotalTime = gameData.timePerTeam;
         document.getElementById('nextTeamBtn').disabled = true;
         updateDisplay();
-        startTimer();
+        startWarning();
       } else {
         // all teams done, wait for audio processing if needed
+        clickLock=true;
         const maxWaitTime = 30000; // 30 seconds max wait
         const startTime = Date.now();
         
@@ -661,8 +674,14 @@ Transcript: "${transcript}"`;
         }
         
         // save scores and go to results
-        localStorage.setItem('teamScores', JSON.stringify(teamScores));
-        alert('All teams have completed their turns!');
+        if (gameData.gameMode === 'sharktank') {
+          localStorage.setItem('teamScoresSharktank', JSON.stringify(teamScoresSharktank));
+          localStorage.setItem('sharktankMode', 'true');
+        } else {
+          localStorage.setItem('teamScores', JSON.stringify(teamScores));
+          localStorage.setItem('sharktankMode', 'false');
+        }
+        clickLock=false;
         // navigate to results page
         window.location.href = 'results.html';
       }
