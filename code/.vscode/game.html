@@ -8,7 +8,8 @@
   <style>
     body {
       font-family: 'Baloo 2', 'Segoe UI', Arial, sans-serif;
-      background: #2176D2;
+      background: #2176D2 url('../../Blurt%20Background.png') no-repeat center center fixed;
+      background-size: cover;
       margin: 0;
       padding: 20px;
       text-align: center;
@@ -213,7 +214,6 @@
       // load game data from localStorage
       const savedData = localStorage.getItem('gameData');
       if (!savedData) {
-        alert('No game data found. Returning to setup.');
         window.location.href = 'home.html';
         return;
       }
@@ -264,12 +264,12 @@
       const apiKey = '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'; // Replace with your actual API key
       
       const promptTemplates = {
-        'debate': `One-sentence debate topic; fun and original; do not reuse common themes; clearly say which side to argue.`,
+        'debate': `One-sentence debate topic; fun and original; do not reuse common themes; clearly say which side to argue for.`,
         'story': `One-sentence story prompt using exactly 2 random objects; keep it simple and playful.`,
         'problem': `One-sentence survival/problem scenario; absurd but easy to grasp.`,
         'tedx': `One-sentence TEDx-style idea to explain or inspire; short and clear.`,
         'sharktank': `One-sentence Shark Tank prompt; clearly describe quirky product/service; ask team to convince investors; fun and direct.`,
-        'freestyle': `Return three pretty-common words separated by commas; no explanation. These will end up being integrated into a freestyle rap. The words should have two syllables max.`
+        'freestyle': `Return three pretty-common words separated by commas; fomrat should be: Create a rap freestyle with these words: word 1, word 2, word 3. The words should have two syllables max.`
       };
 
       const systemPrompt = promptTemplates[gameMode];
@@ -299,7 +299,6 @@
         const data = await response.json();
         return data.choices[0].message.content.trim();
       } catch (error) {
-        console.error('Error generating prompt:', error);
         throw error;
       }
     }
@@ -322,9 +321,7 @@
         // hide loading indicator
         document.getElementById('loadingIndicator').classList.remove('active');
       } catch (error) {
-        console.error('Error generating prompts:', error);
         document.getElementById('loadingIndicator').classList.remove('active');
-        alert('Failed to generate prompts. Using fallback prompts.');
       }
     }
 
@@ -384,8 +381,7 @@
         
         mediaRecorder.start();
       } catch (error) {
-        console.error('Error starting recording:', error);
-        alert('Could not start audio recording. Please enable microphone permissions.');
+        // silent fail
       }
     }
 
@@ -446,15 +442,12 @@
         document.getElementById('loadingIndicator').classList.remove('active');
         document.getElementById('loadingIndicator').textContent = 'Generating prompts...';
       } catch (error) {
-        console.error('Error processing audio:', error);
         document.getElementById('loadingIndicator').classList.remove('active');
-        
-        // store a default score if processing fails
         teamScores.push({
           teamNumber: teamIndex + 1,
           score: 0,
-          feedback: 'Unable to process audio feedback.',
-          transcript: 'Error processing audio',
+          feedback: '',
+          transcript: '',
           prompt: prompt
         });
       } finally {
@@ -486,8 +479,7 @@
         const data = await response.json();
         return data.text;
       } catch (error) {
-        console.error('Error transcribing audio:', error);
-        return 'Transcript unavailable due to processing error.';
+        return '';
       }
     }
 
@@ -536,7 +528,7 @@ NOTE: THIS IS VERY VERY IMPORTANT. THERE SHOULD BE A NEWLINE BETWEEN B AND C BUT
         });
         
         if (!scoreResponse.ok) {
-          throw new Error(`Scoring failed: ${scoreResponse.status}`);
+          throw new Error('Scoring failed');
         }
         
         const scoreData = await scoreResponse.json();
@@ -566,17 +558,16 @@ NOTE: THIS IS VERY VERY IMPORTANT. THERE SHOULD BE A NEWLINE BETWEEN B AND C BUT
         'problem': 'Evaluate problem-solving approach, originality, and practicality.',
         'tedx': 'Evaluate clarity, engagement, and motivational impact.',
         'sharktank': 'Evaluate clarity of the idea, originality, value proposition, basic feasibility, and overall investor persuasion.',
-        'freestyle': 'Evaluate creativity, flow, and effective use of the given words in the rap performance.'
+        'freestyle': 'Evaluate creativity, flow, rhyme, and effective use of the given words in the rap performance.'
       };
       
       // First, get the score
       const scoringPrompt = `You are an expert judge for a speaking competition. Evaluate the following transcript based on:
-1. Content Quality (25 points): Relevance to the prompt and depth of ideas
+1. Content Quality (30 points): Relevance to the prompt and depth of ideas
 2. Creativity & Originality (25 points): Unique perspective and innovative thinking
-3. Structure & Clarity (20 points): Organization, coherence, and clear communication
-4. Speaking Quality (20 points): Minimize filler words, maintain engaging pace
-5. Overall Impact (10 points): How memorable and impactful the presentation was
- KEEP THIS IN MIND. THIS IS VERY VERY IMPORTANT: Do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
+3. Argument/Idea/Points (25 points): Clear thesis and coherent supporting points
+4. Clarity of Ideas (20 points): Organization and understandable wording (ignore tone, prosody, volume, pace, and enunciation)
+ KEEP THIS IN MIND. THIS IS VERY VERY IMPORTANT: Judge ONLY the transcript content. Ignore tone/prosody/pace. Do not take issue with swear words; they are acceptable in this relaxed social context.
  
 ${scoringCriteria[gameMode] || 'Evaluate overall quality and engagement.'}
 
@@ -615,7 +606,7 @@ Provide ONLY a number from 0-100 as your final score. Do not include any explana
         const finalScore = Math.max(0, Math.min(100, score));
         
         // Now get detailed feedback
-        const feedbackPrompt = `As an expert judge, provide brief but specific feedback (2-3 sentences) explaining why this speaking performance received a score of ${finalScore}/100. Be constructive and encouraging. Focus on the most important strengths and one area for improvement. Note that if no transcript is provided, then that explains why the score given should be a zero.
+        const feedbackPrompt = `As an expert judge, provide brief but specific feedback (2-3 sentences) explaining why this performance received a score of ${finalScore}/100. Judge ONLY the transcript content (relevance, ideas, clarity, creativity). Ignore tone, prosody, pace, and enunciation. Focus on the most important strengths and one area for improvement. Note that if no transcript is provided, that explains why the score may be zero.
 KEEP THIS IN MIND. THIS IS VERY VERY IMPORTANT: Do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
 Prompt given: "${prompt}"
 Transcript: "${transcript}"
@@ -639,7 +630,7 @@ Score: ${finalScore}/100`;
         });
         
         if (!feedbackResponse.ok) {
-          throw new Error(`Feedback generation failed: ${feedbackResponse.status}`);
+          throw new Error('Feedback generation failed');
         }
         
         const feedbackData = await feedbackResponse.json();
@@ -647,8 +638,7 @@ Score: ${finalScore}/100`;
         
         return { score: finalScore, feedback: feedback };
       } catch (error) {
-        console.error('Error scoring transcript:', error);
-        return { score: 50, feedback: 'Unable to generate detailed feedback at this time.' };
+        return { score: 50, feedback: '' };
       }
     }
 
