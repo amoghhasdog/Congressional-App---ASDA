@@ -148,6 +148,9 @@
       <button class="next-team-btn" id="nextTeamBtn" disabled>Next Team</button>
       <button class="back-btn" id="backBtn">Back to Setup</button>
     </div>
+
+    <audio id="freestyleaudio" src="freestyle.mp3" preload="auto"></audio>
+
   </div>
 
   <script>
@@ -288,8 +291,15 @@
         
         if (timeRemaining <= 0) {
           stopTimer();
+          document.getElementById('freestyleaudio').pause();
         }
       }, 1000);
+
+      //start audio from beginning
+      if (gameData.gameMode === 'freestyle') {
+          document.getElementById('freestyleaudio').currentTime = 0;
+          document.getElementById('freestyleaudio').play();
+      }
     }
 
     async function startRecording() {
@@ -411,24 +421,20 @@
     }
 
     async function scoreTranscriptSharktank(transcript, prompt) {
+      //TODO: this needs to return two distinct values: string describing investment decision and string of brief feedback. then another ai needs to determine which investment decision was most advantageous?
       const apiKey = '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';
       
       const scoringCriteria = 'Evaluate clarity of the idea, originality, value proposition, basic feasibility, and overall investor persuasion.';
       
       // First, get the score
-      const scoringPrompt = `You are an expert judge for a speaking competition. Evaluate the following transcript based on:
-1. Content Quality (25 points): Relevance to the prompt and depth of ideas
-2. Creativity & Originality (25 points): Unique perspective and innovative thinking
-3. Structure & Clarity (20 points): Organization, coherence, and clear communication
-4. Speaking Quality (20 points): Minimize filler words, maintain engaging pace
-5. Overall Impact (10 points): How memorable and impactful the presentation was
+      const scoringPrompt = `You are a billionare on Shark Tank evaluating a pitch. Evaluate the following transcript based on:
 
-${scoringCriteria[gameMode] || 'Evaluate overall quality and engagement.'}
+${scoringCriteria || 'Evaluate overall quality and engagement.'}
 
 Prompt given: "${prompt}"
 Transcript: "${transcript}"
 
-Provide ONLY a number from 0-100 as your final score. Do not include any explanation, just the number.`;
+Please state your investment decision and provide brief feedback.`
 
       try {
         // Get the score
@@ -455,45 +461,11 @@ Provide ONLY a number from 0-100 as your final score. Do not include any explana
         
         const scoreData = await scoreResponse.json();
         const scoreText = scoreData.choices[0].message.content.trim();
-        const scoreMatch = scoreText.match(/\d+/);
-        const score = scoreMatch ? parseInt(scoreMatch[0]) : 50;
-        const finalScore = Math.max(0, Math.min(100, score));
         
-        // Now get detailed feedback
-        const feedbackPrompt = `As an expert judge, provide brief but specific feedback (2-3 sentences) explaining why this speaking performance received a score of ${finalScore}/100. Be constructive and encouraging. Focus on the most important strengths and one area for improvement.
-
-Prompt given: "${prompt}"
-Transcript: "${transcript}"
-Score: ${finalScore}/100`;
-
-        const feedbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [
-              { role: 'system', content: 'You are a supportive and constructive judge for speaking competitions.' },
-              { role: 'user', content: feedbackPrompt }
-            ],
-            max_tokens: 150,
-            temperature: 0.7
-          })
-        });
-        
-        if (!feedbackResponse.ok) {
-          throw new Error(`Feedback generation failed: ${feedbackResponse.status}`);
-        }
-        
-        const feedbackData = await feedbackResponse.json();
-        const feedback = feedbackData.choices[0].message.content.trim();
-        
-        return { score: finalScore, feedback: feedback };
+        return scoreText;
       } catch (error) {
         console.error('Error scoring transcript:', error);
-        return { score: 50, feedback: 'Unable to generate detailed feedback at this time.' };
+        return error;
       }
     }
 
@@ -506,7 +478,7 @@ Score: ${finalScore}/100`;
         'problem': 'Evaluate problem-solving approach, originality, and practicality.',
         'tedx': 'Evaluate clarity, engagement, and motivational impact.',
         'sharktank': 'Evaluate clarity of the idea, originality, value proposition, basic feasibility, and overall investor persuasion.',
-        'freestyle': 'Evaluate creativity, flow, and effective use of the given words in the rap performance. Note: do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.'
+        'freestyle': 'Evaluate creativity, flow, and effective use of the given words in the rap performance.'
       };
       
       // First, get the score
@@ -516,6 +488,7 @@ Score: ${finalScore}/100`;
 3. Structure & Clarity (20 points): Organization, coherence, and clear communication
 4. Speaking Quality (20 points): Minimize filler words, maintain engaging pace
 5. Overall Impact (10 points): How memorable and impactful the presentation was
+ Note: do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
 
 ${scoringCriteria[gameMode] || 'Evaluate overall quality and engagement.'}
 
