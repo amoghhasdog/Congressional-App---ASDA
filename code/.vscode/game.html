@@ -188,6 +188,7 @@
     let isProcessingAudio = false; // flag to track if audio is being processed
 
     async function startWarning() {
+      document.getElementById('timer').style.display='none';
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       timeRemaining=5;
       currentTeamTotalTime=5;
@@ -205,6 +206,7 @@
 
     // initialize game when page loads
     window.addEventListener('load', async function() {
+      document.getElementById('timer').style.display='none';
       // load game data from localStorage
       const savedData = localStorage.getItem('gameData');
       if (!savedData) {
@@ -325,8 +327,11 @@
 
     async function startTimer() {
 
+      document.getElementById('timer').style.display='block';
+
       timeRemaining = gameData.timePerTeam;
       currentTeamTotalTime = gameData.timePerTeam;
+      updateTimerDisplay();
 
       // start recording indicator
       document.getElementById('recordingIndicator').classList.add('active');
