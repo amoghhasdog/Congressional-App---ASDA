@@ -215,9 +215,75 @@
   </div>
 
   <script>
+    function processSharkTank() {
+      const scoresData = localStorage.getItem('teamScoresSharktank');
+      if (!scoresData) {
+        document.getElementById('rankings-container').innerHTML = 
+          '<div class="no-results">No results found. Please play a game first.</div>';
+        return;
+      }
+      let teamScores = JSON.parse(scoresData);
+
+      teamScores.sort((a, b) => b.score - a.score);
+      
+      // display rankings
+      const container = document.getElementById('rankings-container');
+
+      var rankingsHTML;
+      
+      rankingsHTML = teamScores.map((team, index) => {
+        let cardClass = '';
+        let rankText = `#${index + 1}`;
+        
+        if (index === 0) {
+          cardClass = 'first';
+        } else if (index === 1) {
+          cardClass = 'second';
+        } else if (index === 2) {
+          cardClass = 'third';
+        }
+        
+        return `
+          <div class="team-card ${cardClass}">
+            <div class="rank-badge">${rankText}</div>
+            <div class="team-number">Team ${team.teamNumber}</div>
+            <div class="team-valuation">${team.score} / 100</div>
+            <div class="team-investment"><strong>Investment Amount:</strong> $${team.investedAmount}</div>
+            <div class="team-equity"><strong>Equity Taken:</strong> ${team.equityTaken}%</div>
+            <div class="feedback-box">
+              <strong>AI Feedback:</strong>
+              <p>${team.feedback || 'No feedback available.'}</p>
+            </div>
+            <div class="team-details">
+              <details>
+                <summary>View Full Details</summary>
+                <div class="detail-item">
+                  <strong>Prompt:</strong>
+                  <div class="prompt-text">${team.prompt}</div>
+                </div>
+                <div class="detail-item">
+                  <strong>Transcript:</strong>
+                  <div class="transcript-text">${team.transcript}</div>
+                </div>
+              </details>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = '<div class="team-rankings">' + rankingsHTML + '</div>';
+
+
+
+    }
     window.addEventListener('load', function() {
       // load scores from localStorage
       const scoresData = localStorage.getItem('teamScores');
+      var sharkTankScoresData;
+      if (localStorage.getItem('sharktankMode') === 'true') {
+        processSharkTank();
+        return;
+      }
       
       if (!scoresData) {
         document.getElementById('rankings-container').innerHTML = 
@@ -232,8 +298,10 @@
       
       // display rankings
       const container = document.getElementById('rankings-container');
+
+      var rankingsHTML;
       
-      const rankingsHTML = teamScores.map((team, index) => {
+      rankingsHTML = teamScores.map((team, index) => {
         let cardClass = '';
         let rankText = `#${index + 1}`;
         
@@ -270,13 +338,13 @@
           </div>
         `;
       }).join('');
-      
+
       container.innerHTML = '<div class="team-rankings">' + rankingsHTML + '</div>';
     });
     
     // event listeners
     document.getElementById('playAgainBtn').addEventListener('click', function() {
-      window.location.href = 'home.html';
+      window.location.href = 'game.html';
     });
     
     document.getElementById('homeBtn').addEventListener('click', function() {

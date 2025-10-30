@@ -153,7 +153,7 @@
   <div class="game-container">
     <div class="team-display" id="currentTeam">Team 1</div>
     
-    <div class="timer" id="timer">2:00</div>
+    <div class="timer" id="timer">0:00</div>
     <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
     
     <div class="recording-indicator" id="recordingIndicator">Recording...</div>
@@ -176,15 +176,32 @@
     // game state
     let gameData = null;
     let currentTeamIndex = 0;
-    let timeRemaining = 0;
-    let currentTeamTotalTime = 0; // track total time for progress bar
+    let timeRemaining = 5;
+    let currentTeamTotalTime = 5; // track total time for progress bar
     let timerInterval = null;
     let isRecording = false;
     let teamPrompts = []; // store generated prompts for each team
     let mediaRecorder = null;
     let audioChunks = [];
     let teamScores = []; // store scores for each team
+    let teamScoresSharktank = []; // store scores for shark tank mode
     let isProcessingAudio = false; // flag to track if audio is being processed
+
+    async function startWarning() {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      timeRemaining=5;
+      currentTeamTotalTime=5;
+      warningInterval = setInterval(function() {
+        timeRemaining--;
+        updateProgressBar();
+        
+        if (timeRemaining < 0) {
+          timeRemaining=gameData.timePerTeam;
+          clearInterval(warningInterval);
+          startTimer();
+        }
+      }, 1000);
+  }
 
     // initialize game when page loads
     window.addEventListener('load', async function() {
@@ -197,13 +214,13 @@
       }
       
       gameData = JSON.parse(savedData);
-      timeRemaining = gameData.timePerTeam + 5; // add 5 seconds to selected time
-      currentTeamTotalTime = timeRemaining;
+      //timeRemaining = gameData.timePerTeam;
+      currentTeamTotalTime = 5;
       
       // generate prompts for all teams
-      await generateAllPrompts(); 
+      await generateAllPrompts();
       updateDisplay();
-      startTimer();
+      await startWarning();
     });
 
     function updateDisplay() {
@@ -247,7 +264,7 @@
         'problem': `One-sentence survival/problem scenario; absurd but easy to grasp.`,
         'tedx': `One-sentence TEDx-style idea to explain or inspire; short and clear.`,
         'sharktank': `One-sentence Shark Tank prompt; clearly describe quirky product/service; ask team to convince investors; fun and direct.`,
-        'freestyle': `Return three entirely-random words separated by commas; avoid common words; no explanation. These will end up being integrated into a freestyle rap.`
+        'freestyle': `Return three pretty-common words separated by commas; no explanation. These will end up being integrated into a freestyle rap. The words should have two syllables max.`
       };
 
       const systemPrompt = promptTemplates[gameMode];
@@ -307,6 +324,10 @@
     }
 
     async function startTimer() {
+
+      timeRemaining = gameData.timePerTeam;
+      currentTeamTotalTime = gameData.timePerTeam;
+
       // start recording indicator
       document.getElementById('recordingIndicator').classList.add('active');
       isRecording = true;
@@ -334,7 +355,6 @@
 
     async function startRecording() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
         
@@ -387,17 +407,30 @@
         // transcribe audio
         const transcript = await transcribeAudio(audioBlob);
         
+        var result;
+
         // score the transcript (now returns {score, feedback})
-        const result = await scoreTranscript(transcript, prompt, gameData.gameMode);
-        
-        // store score with feedback using the captured team info
-        teamScores.push({
-          teamNumber: teamIndex + 1,
-          score: result.score,
-          feedback: result.feedback,
-          transcript: transcript,
-          prompt: prompt
-        });
+        if (gameData.gameMode === 'sharktank') {
+          result = await scoreTranscriptSharktank(transcript, prompt);
+          teamScoresSharktank.push({
+            teamNumber: teamIndex + 1,
+            score: result.score,
+            feedback: result.feedback,
+            transcript: transcript,
+            prompt: prompt,
+            investedAmount: result.investedAmount,
+            equityTaken: result.equityTaken
+          });
+        } else {
+            result = await scoreTranscript(transcript, prompt, gameData.gameMode);
+            teamScores.push({
+            teamNumber: teamIndex + 1,
+            score: result.score,
+            feedback: result.feedback,
+            transcript: transcript,
+            prompt: prompt
+          });
+        }
         
         console.log(`Team ${teamIndex + 1} scored ${result.score}/100`);
         
@@ -464,7 +497,15 @@ ${scoringCriteria || 'Evaluate overall quality and engagement.'}
 Prompt given: "${prompt}"
 Transcript: "${transcript}"
 
-Please state your investment decision and provide brief feedback.`
+Please state your investment decision and provide brief feedback.
+Here is how you should format your response:
+A B
+C
+where A=the amount invested without dollar signs, commas, or periods (and keep in mind this can be zero)
+B=the percentage of equity taken (just the number, no % sign)
+C=brief feedback (2-3 sentences) explaining your decision.
+and there is a newline between B and C.
+NOTE: THIS IS VERY VERY IMPORTANT. THERE SHOULD BE A NEWLINE BETWEEN B AND C BUT NOT BETWEEN A AND B. THERE SHOULD ONLY BE A SPACE BETWEEN A AND B.`;
 
       try {
         // Get the score
@@ -480,7 +521,7 @@ Please state your investment decision and provide brief feedback.`
               { role: 'system', content: 'You are a fair and objective judge for speaking competitions.' },
               { role: 'user', content: scoringPrompt }
             ],
-            max_tokens: 10,
+            max_tokens: 120,
             temperature: 0.5
           })
         });
@@ -492,10 +533,18 @@ Please state your investment decision and provide brief feedback.`
         const scoreData = await scoreResponse.json();
         const scoreText = scoreData.choices[0].message.content.trim();
         
-        return scoreText;
+        const investedAmount = scoreText.split(' ')[0];
+        const equityTaken = scoreText.split(' ')[1].split('\n')[0];
+        const feedback = scoreText.substring(scoreText.indexOf('\n')).trim();
+        var valuation=0;
+        if (investedAmount!=0) {
+            valuation = (parseFloat(investedAmount) / (parseFloat(equityTaken) / 100));
+        }
+
+        return {"score":valuation,"feedback":feedback,"investedAmount":investedAmount,"equityTaken":equityTaken};
       } catch (error) {
         console.error('Error scoring transcript:', error);
-        return error;
+        return {"score":0,"feedback":"Unable to generate detailed feedback at this time.","investedAmount":"0","equityTaken":"0" };
       }
     }
 
@@ -518,8 +567,8 @@ Please state your investment decision and provide brief feedback.`
 3. Structure & Clarity (20 points): Organization, coherence, and clear communication
 4. Speaking Quality (20 points): Minimize filler words, maintain engaging pace
 5. Overall Impact (10 points): How memorable and impactful the presentation was
- Note: do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
-
+ KEEP THIS IN MIND. THIS IS VERY VERY IMPORTANT: Do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
+ 
 ${scoringCriteria[gameMode] || 'Evaluate overall quality and engagement.'}
 
 Prompt given: "${prompt}"
@@ -538,7 +587,7 @@ Provide ONLY a number from 0-100 as your final score. Do not include any explana
           body: JSON.stringify({
             model: 'gpt-3.5-turbo',
             messages: [
-              { role: 'system', content: 'You are a fair and objective judge for speaking competitions.' },
+              { role: 'system', content: 'You are a fair and objective judge for speaking competitions. You must be brutally honest as well. Dont just be a yes man' },
               { role: 'user', content: scoringPrompt }
             ],
             max_tokens: 10,
@@ -558,7 +607,7 @@ Provide ONLY a number from 0-100 as your final score. Do not include any explana
         
         // Now get detailed feedback
         const feedbackPrompt = `As an expert judge, provide brief but specific feedback (2-3 sentences) explaining why this speaking performance received a score of ${finalScore}/100. Be constructive and encouraging. Focus on the most important strengths and one area for improvement.
-
+KEEP THIS IN MIND. THIS IS VERY VERY IMPORTANT: Do not take issue with swear words. These words are perfectly acceptable in this relaxed social context.
 Prompt given: "${prompt}"
 Transcript: "${transcript}"
 Score: ${finalScore}/100`;
@@ -572,7 +621,7 @@ Score: ${finalScore}/100`;
           body: JSON.stringify({
             model: 'gpt-3.5-turbo',
             messages: [
-              { role: 'system', content: 'You are a supportive and constructive judge for speaking competitions.' },
+              { role: 'system', content: 'You are a constructive yet brutally honest judge for speaking competitions.' },
               { role: 'user', content: feedbackPrompt }
             ],
             max_tokens: 150,
@@ -595,15 +644,17 @@ Score: ${finalScore}/100`;
     }
 
     // event listeners
+    window.clickLock=false;
     document.getElementById('nextTeamBtn').addEventListener('click', async function() {
+      if (clickLock) return;
+      clickLock=true;
       if (currentTeamIndex < gameData.teams - 1) {
         // move to next team
         currentTeamIndex++;
-        timeRemaining = gameData.timePerTeam + 5;
-        currentTeamTotalTime = timeRemaining;
+        currentTeamTotalTime = gameData.timePerTeam;
         document.getElementById('nextTeamBtn').disabled = true;
         updateDisplay();
-        startTimer();
+        startWarning();
       } else {
         // all teams done, wait for audio processing if needed
         const maxWaitTime = 30000; // 30 seconds max wait
@@ -614,8 +665,13 @@ Score: ${finalScore}/100`;
         }
         
         // save scores and go to results
-        localStorage.setItem('teamScores', JSON.stringify(teamScores));
-        alert('All teams have completed their turns!');
+        if (gameData.gameMode === 'sharktank') {
+          localStorage.setItem('teamScoresSharktank', JSON.stringify(teamScoresSharktank));
+          localStorage.setItem('sharktankMode', 'true');
+        } else {
+          localStorage.setItem('teamScores', JSON.stringify(teamScores));
+          localStorage.setItem('sharktankMode', 'false');
+        }
         // navigate to results page
         window.location.href = 'results.html';
       }
